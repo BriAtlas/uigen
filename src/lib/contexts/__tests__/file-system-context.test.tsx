@@ -26,6 +26,12 @@ beforeEach(() => {
   vi.clearAllMocks();
   (VirtualFileSystem as any).mockImplementation(() => mockFileSystem);
   mockFileSystem.getAllFiles.mockReturnValue(new Map());
+  // Mock createFileWithParents to return success by default
+  mockFileSystem.createFileWithParents.mockReturnValue("File created successfully");
+  // Mock replaceInFile to return success by default
+  mockFileSystem.replaceInFile.mockReturnValue("File replaced successfully");
+  // Mock readFile to return content for str_replace tests
+  mockFileSystem.readFile.mockReturnValue("new content");
 });
 
 afterEach(() => {
@@ -58,7 +64,7 @@ test("createFile calls fileSystem method and triggers refresh", () => {
     result.current.createFile("/test.js", "content");
   });
 
-  expect(mockFileSystem.createFile).toHaveBeenCalledWith("/test.js", "content");
+  expect(mockFileSystem.createFileWithParents).toHaveBeenCalledWith("/test.js", "content");
   expect(result.current.refreshTrigger).toBe(initialTrigger + 1);
 });
 
@@ -272,7 +278,7 @@ test("handles str_replace_editor create command", () => {
     "/test.js",
     "console.log('test');"
   );
-  expect(mockFileSystem.createFile).toHaveBeenCalledWith(
+  expect(mockFileSystem.createFileWithParents).toHaveBeenCalledWith(
     "/test.js",
     "console.log('test');"
   );
@@ -327,7 +333,7 @@ test("handles str_replace_editor str_replace command", () => {
 
   expect(mockFileSystem.replaceInFile).toHaveBeenCalledWith("/test.js", "old", "new");
   expect(mockFileSystem.readFile).toHaveBeenCalledWith("/test.js");
-  expect(mockFileSystem.updateFile).toHaveBeenCalledWith("/test.js", "new content");
+  // Note: updateFile is no longer called since we update state directly to prevent race conditions
   expect(result.current.refreshTrigger).toBe(initialTrigger + 1);
 });
 

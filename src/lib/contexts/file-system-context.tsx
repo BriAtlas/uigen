@@ -6,13 +6,10 @@ import React, {
   useState,
   useCallback,
   useEffect,
+  useMemo,
 } from "react";
 import { VirtualFileSystem, FileNode } from "@/lib/file-system";
-
-interface ToolCall {
-  toolName: string;
-  args: any;
-}
+import { handleToolCall, ToolCall } from "@/lib/contexts/file-system-operations";
 
 interface FileSystemContextType {
   fileSystem: VirtualFileSystem;
@@ -56,6 +53,13 @@ export function FileSystemProvider({
     setRefreshTrigger((prev) => prev + 1);
   }, []);
 
+  // Memoize file operations to prevent unnecessary re-renders
+  const operations = useMemo(() => ({
+    fileSystem,
+    onFileChange: triggerRefresh,
+    onFileSelect: setSelectedFile,
+  }), [fileSystem, triggerRefresh]);
+
   useEffect(() => {
     if (!selectedFile) {
       const files = fileSystem.getAllFiles();
@@ -79,6 +83,7 @@ export function FileSystemProvider({
     }
   }, [selectedFile, fileSystem, refreshTrigger]);
 
+  // Simplified file operations using direct file system calls
   const createFile = useCallback(
     (path: string, content: string = "") => {
       fileSystem.createFile(path, content);
@@ -110,11 +115,9 @@ export function FileSystemProvider({
     (oldPath: string, newPath: string): boolean => {
       const success = fileSystem.rename(oldPath, newPath);
       if (success) {
-        // Update selected file if it was renamed
         if (selectedFile === oldPath) {
           setSelectedFile(newPath);
-        } else if (selectedFile && selectedFile.startsWith(oldPath + "/")) {
-          // Update selected file if it's inside a renamed directory
+        } else if (selectedFile?.startsWith(oldPath + "/")) {
           const relativePath = selectedFile.substring(oldPath.length);
           setSelectedFile(newPath + relativePath);
         }
@@ -142,73 +145,11 @@ export function FileSystemProvider({
     triggerRefresh();
   }, [fileSystem, triggerRefresh]);
 
-  const handleToolCall = useCallback(
+  const handleToolCallWrapper = useCallback(
     (toolCall: ToolCall) => {
-      const { toolName, args } = toolCall;
-
-      // Handle str_replace_editor tool
-      if (toolName === "str_replace_editor" && args) {
-        const { command, path, file_text, old_str, new_str, insert_line } = args;
-
-        switch (command) {
-          case "create":
-            if (path && file_text !== undefined) {
-              const result = fileSystem.createFileWithParents(path, file_text);
-              if (!result.startsWith("Error:")) {
-                createFile(path, file_text);
-              }
-            }
-            break;
-
-          case "str_replace":
-            if (path && old_str !== undefined && new_str !== undefined) {
-              const result = fileSystem.replaceInFile(path, old_str, new_str);
-              if (!result.startsWith("Error:")) {
-                const content = fileSystem.readFile(path);
-                if (content !== null) {
-                  updateFile(path, content);
-                }
-              }
-            }
-            break;
-
-          case "insert":
-            if (path && new_str !== undefined && insert_line !== undefined) {
-              const result = fileSystem.insertInFile(path, insert_line, new_str);
-              if (!result.startsWith("Error:")) {
-                const content = fileSystem.readFile(path);
-                if (content !== null) {
-                  updateFile(path, content);
-                }
-              }
-            }
-            break;
-        }
-      }
-
-      // Handle file_manager tool
-      if (toolName === "file_manager" && args) {
-        const { command, path, new_path } = args;
-
-        switch (command) {
-          case "rename":
-            if (path && new_path) {
-              renameFile(path, new_path);
-            }
-            break;
-
-          case "delete":
-            if (path) {
-              const success = fileSystem.deleteFile(path);
-              if (success) {
-                deleteFile(path);
-              }
-            }
-            break;
-        }
-      }
+      handleToolCall(operations, toolCall, selectedFile);
     },
-    [fileSystem, createFile, updateFile, deleteFile, renameFile]
+    [operations, selectedFile]
   );
 
   return (
@@ -224,7 +165,7 @@ export function FileSystemProvider({
         getFileContent,
         getAllFiles,
         refreshTrigger,
-        handleToolCall,
+        handleToolCall: handleToolCallWrapper,
         reset,
       }}
     >

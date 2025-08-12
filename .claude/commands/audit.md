@@ -1,9 +1,9 @@
 # Audit
 
-Your goal is to update any vulnerable dependecies.
+Your goal is to update any vulnerable dependencies.
 
 Do the following:
 
-1. Run 'nom audit' to find vulnerable installed packages on thos project
+1. Run 'npm audit' to find vulnerable installed packages on this project
 2. Run 'npm audit fix' to apply updates
-3. Run tests and verify the updates didn't break antyhing
+3. Run tests and verify the updates didn't break anything

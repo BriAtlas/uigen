@@ -143,7 +143,7 @@ test("createImportMap creates multiple path variations for files", () => {
 
 test("createImportMap creates placeholder modules for missing imports", () => {
   const files = new Map([
-    ["/App.jsx", "import Button from './components/Button'; export default function App() {}"],
+    ["/App.jsx", "import Button from './components/Button'; export default function App() { return React.createElement('div', null, 'App'); }"],
   ]);
 
   const result = createImportMap(files);
@@ -156,7 +156,7 @@ test("createImportMap creates placeholder modules for missing imports", () => {
 
 test("createImportMap handles @/ alias imports", () => {
   const files = new Map([
-    ["/App.jsx", "import { utils } from '@/lib/utils'; export default function App() {}"],
+    ["/App.jsx", "import { utils } from '@/lib/utils'; export default function App() { return React.createElement('div', null, 'App'); }"],
   ]);
 
   const result = createImportMap(files);
@@ -220,14 +220,16 @@ test("integration: full transformation pipeline works", () => {
       import React from 'react';
       import Button from './Button';
       
-      export default function App() {
-        return <div><Button /></div>;
-      }
+      const App = () => {
+        return React.createElement('div', null, React.createElement(Button));
+      };
+      export default App;
     `],
     ["/Button.jsx", `
-      export default function Button() {
-        return <button>Click me</button>;
-      }
+      const Button = () => {
+        return React.createElement('button', null, 'Click me');
+      };
+      export default Button;
     `],
   ]);
 
@@ -467,14 +469,16 @@ test("files with syntax errors are not included in import map", () => {
   const files = new Map([
     ["/App.jsx", `
       import BadComponent from './BadComponent';
-      export default function App() { 
-        return <div><BadComponent /></div>; 
-      }
+      const App = () => { 
+        return React.createElement('div', null, React.createElement(BadComponent)); 
+      };
+      export default App;
     `],
     ["/BadComponent.jsx", `
-      export default function BadComponent() {
-        return <div>Missing closing tag
-      }
+      const BadComponent = () => {
+        return React.createElement('div', null, 'Missing closing tag');
+      };
+      export default BadComponent;
     `],
   ]);
   

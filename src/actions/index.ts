@@ -5,6 +5,49 @@ import { prisma } from "@/lib/prisma";
 import { createSession, deleteSession, getSession } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { validateEmail, validatePassword, sanitizeInput } from "@/lib/validation";
+
+// Simple in-memory store for tracking failed login attempts
+const failedAttempts = new Map<string, { count: number; lastAttempt: number }>();
+
+// Clean up failed attempts periodically
+setInterval(() => {
+  const now = Date.now();
+  const cutoff = 15 * 60 * 1000; // 15 minutes
+  
+  for (const [email, data] of failedAttempts.entries()) {
+    if (now - data.lastAttempt > cutoff) {
+      failedAttempts.delete(email);
+    }
+  }
+}, 60000); // Clean up every minute
+
+function isRateLimited(email: string): boolean {
+  const attempts = failedAttempts.get(email);
+  if (!attempts) return false;
+  
+  const now = Date.now();
+  const timeSinceLastAttempt = now - attempts.lastAttempt;
+  
+  // Block if more than 5 attempts in 15 minutes
+  if (attempts.count >= 5 && timeSinceLastAttempt < 15 * 60 * 1000) {
+    return true;
+  }
+  
+  return false;
+}
+
+function recordFailedAttempt(email: string): void {
+  const existing = failedAttempts.get(email);
+  failedAttempts.set(email, {
+    count: existing ? existing.count + 1 : 1,
+    lastAttempt: Date.now(),
+  });
+}
+
+function clearFailedAttempts(email: string): void {
+  failedAttempts.delete(email);
+}
 
 export interface AuthResult {
   success: boolean;
@@ -16,15 +59,25 @@ export async function signUp(
   password: string
 ): Promise<AuthResult> {
   try {
-    // Validate input
-    if (!email || !password) {
-      return { success: false, error: "Email and password are required" };
+    // Sanitize inputs
+    email = sanitizeInput(email);
+    password = sanitizeInput(password);
+
+    // Comprehensive server-side validation
+    const emailValidation = validateEmail(email);
+    const passwordValidation = validatePassword(password);
+
+    if (!emailValidation.isValid) {
+      return { 
+        success: false, 
+        error: emailValidation.errors.join(", ") 
+      };
     }
 
-    if (password.length < 8) {
-      return {
-        success: false,
-        error: "Password must be at least 8 characters",
+    if (!passwordValidation.isValid) {
+      return { 
+        success: false, 
+        error: passwordValidation.errors.join(", ") 
       };
     }
 
@@ -64,9 +117,27 @@ export async function signIn(
   password: string
 ): Promise<AuthResult> {
   try {
-    // Validate input
-    if (!email || !password) {
-      return { success: false, error: "Email and password are required" };
+    // Sanitize inputs
+    email = sanitizeInput(email);
+    password = sanitizeInput(password);
+
+    // Server-side validation  
+    const emailValidation = validateEmail(email);
+    if (!emailValidation.isValid) {
+      return { success: false, error: "Invalid email format" };
+    }
+
+    // Basic password validation for sign-in (less strict than sign-up)
+    if (!password || password.length < 1) {
+      return { success: false, error: "Password is required" };
+    }
+
+    // Check for rate limiting
+    if (isRateLimited(email)) {
+      return { 
+        success: false, 
+        error: "Too many failed attempts. Please try again in 15 minutes." 
+      };
     }
 
     // Find user
@@ -75,6 +146,7 @@ export async function signIn(
     });
 
     if (!user) {
+      recordFailedAttempt(email);
       return { success: false, error: "Invalid credentials" };
     }
 
@@ -82,8 +154,12 @@ export async function signIn(
     const isValidPassword = await bcrypt.compare(password, user.password);
 
     if (!isValidPassword) {
+      recordFailedAttempt(email);
       return { success: false, error: "Invalid credentials" };
     }
+
+    // Clear failed attempts on successful login
+    clearFailedAttempts(email);
 
     // Create session
     await createSession(user.id, user.email);

@@ -5,6 +5,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { validateEmail, validatePassword, validatePasswordMatch, sanitizeInput } from "@/lib/validation";
+import { ValidationErrors } from "@/components/common/ValidationErrors";
+import { ErrorMessage } from "@/components/common/ErrorMessage";
 
 interface SignUpFormProps {
   onSuccess?: () => void;
@@ -16,24 +19,38 @@ export function SignUpForm({ onSuccess }: SignUpFormProps) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
+  const validateAndSubmit = async () => {
+    const validations = [
+      validateEmail(email),
+      validatePassword(password),
+      validatePasswordMatch(password, confirmPassword)
+    ];
+    
+    const allErrors = validations.flatMap(v => v.errors);
 
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
+    if (allErrors.length > 0) {
+      setValidationErrors(allErrors);
       return;
     }
 
-    const result = await signUp(email, password);
+    const sanitizedEmail = sanitizeInput(email);
+    const sanitizedPassword = sanitizeInput(password);
+    const result = await signUp(sanitizedEmail, sanitizedPassword);
 
     if (result.success) {
-      // The redirect is handled by the hook
       onSuccess?.();
     } else {
       setError(result.error || "Failed to sign up");
     }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    setValidationErrors([]);
+    await validateAndSubmit();
   };
 
   return (
@@ -63,7 +80,7 @@ export function SignUpForm({ onSuccess }: SignUpFormProps) {
           minLength={8}
         />
         <p className="text-xs text-gray-500">
-          Must be at least 8 characters long
+          Must be at least 8 characters with uppercase, lowercase, number, and special character
         </p>
       </div>
 
@@ -79,11 +96,8 @@ export function SignUpForm({ onSuccess }: SignUpFormProps) {
         />
       </div>
 
-      {error && (
-        <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">
-          {error}
-        </div>
-      )}
+      <ValidationErrors errors={validationErrors} />
+      <ErrorMessage error={error} />
 
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading ? "Creating account..." : "Sign Up"}

@@ -40,3 +40,4 @@ export function ChatInterface() {
     </div>
   );
 }
+

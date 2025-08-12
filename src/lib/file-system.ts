@@ -1,3 +1,11 @@
+import {
+  normalizePath,
+  getParentPath,
+  getFileName,
+  createDirectoryPath,
+  isValidPath,
+} from "@/lib/path-utils";
+
 export interface FileNode {
   type: "file" | "directory";
   name: string;
@@ -5,6 +13,8 @@ export interface FileNode {
   content?: string;
   children?: Map<string, FileNode>;
 }
+
+import { FILE_SYSTEM_LIMITS, ERROR_MESSAGES } from "@/lib/constants";
 
 export class VirtualFileSystem {
   private files: Map<string, FileNode> = new Map();
@@ -20,65 +30,44 @@ export class VirtualFileSystem {
     this.files.set("/", this.root);
   }
 
-  private normalizePath(path: string): string {
-    // Ensure path starts with /
-    if (!path.startsWith("/")) {
-      path = "/" + path;
+  private validatePath(path: string): void {
+    if (!isValidPath(path)) {
+      throw new Error(ERROR_MESSAGES.FILE_SYSTEM.INVALID_PATH);
     }
-    // Remove trailing slash except for root
-    if (path !== "/" && path.endsWith("/")) {
-      path = path.slice(0, -1);
+    if (path.length > FILE_SYSTEM_LIMITS.MAX_PATH_LENGTH) {
+      throw new Error(`${ERROR_MESSAGES.FILE_SYSTEM.PATH_TOO_LONG}: ${path.length} > ${FILE_SYSTEM_LIMITS.MAX_PATH_LENGTH}`);
     }
-    // Normalize multiple slashes
-    path = path.replace(/\/+/g, "/");
-    return path;
   }
 
-  private getParentPath(path: string): string {
-    const normalized = this.normalizePath(path);
-    if (normalized === "/") return "/";
-    const parts = normalized.split("/");
-    parts.pop();
-    return parts.length === 1 ? "/" : parts.join("/");
-  }
-
-  private getFileName(path: string): string {
-    const normalized = this.normalizePath(path);
-    if (normalized === "/") return "/";
-    const parts = normalized.split("/");
-    return parts[parts.length - 1];
+  private validateContent(content: string): void {
+    if (content.length > FILE_SYSTEM_LIMITS.MAX_FILE_SIZE) {
+      throw new Error(`${ERROR_MESSAGES.FILE_SYSTEM.FILE_TOO_LARGE}: ${content.length} > ${FILE_SYSTEM_LIMITS.MAX_FILE_SIZE}`);
+    }
   }
 
   private getParentNode(path: string): FileNode | null {
-    const parentPath = this.getParentPath(path);
+    const parentPath = getParentPath(path);
     return this.files.get(parentPath) || null;
   }
 
   createFile(path: string, content: string = ""): FileNode | null {
-    const normalized = this.normalizePath(path);
+    this.validatePath(path);
+    this.validateContent(content);
+    
+    const normalized = normalizePath(path);
 
-    // Check if file already exists
     if (this.files.has(normalized)) {
       return null;
     }
 
-    // Create parent directories if they don't exist
-    const parts = normalized.split("/").filter(Boolean);
-    let currentPath = "";
-
-    for (let i = 0; i < parts.length - 1; i++) {
-      currentPath += "/" + parts[i];
-      if (!this.exists(currentPath)) {
-        this.createDirectory(currentPath);
-      }
-    }
+    this.ensureParentDirectories(normalized);
 
     const parent = this.getParentNode(normalized);
     if (!parent || parent.type !== "directory") {
       return null;
     }
 
-    const fileName = this.getFileName(normalized);
+    const fileName = getFileName(normalized);
     const file: FileNode = {
       type: "file",
       name: fileName,
@@ -92,10 +81,20 @@ export class VirtualFileSystem {
     return file;
   }
 
-  createDirectory(path: string): FileNode | null {
-    const normalized = this.normalizePath(path);
+  private ensureParentDirectories(path: string): void {
+    const directories = createDirectoryPath(path);
+    for (const dirPath of directories) {
+      if (!this.exists(dirPath)) {
+        this.createDirectory(dirPath);
+      }
+    }
+  }
 
-    // Check if directory already exists
+  createDirectory(path: string): FileNode | null {
+    this.validatePath(path);
+    
+    const normalized = normalizePath(path);
+
     if (this.files.has(normalized)) {
       return null;
     }
@@ -105,7 +104,7 @@ export class VirtualFileSystem {
       return null;
     }
 
-    const dirName = this.getFileName(normalized);
+    const dirName = getFileName(normalized);
     const directory: FileNode = {
       type: "directory",
       name: dirName,
@@ -120,7 +119,9 @@ export class VirtualFileSystem {
   }
 
   readFile(path: string): string | null {
-    const normalized = this.normalizePath(path);
+    this.validatePath(path);
+    
+    const normalized = normalizePath(path);
     const file = this.files.get(normalized);
 
     if (!file || file.type !== "file") {
@@ -131,7 +132,10 @@ export class VirtualFileSystem {
   }
 
   updateFile(path: string, content: string): boolean {
-    const normalized = this.normalizePath(path);
+    this.validatePath(path);
+    this.validateContent(content);
+    
+    const normalized = normalizePath(path);
     const file = this.files.get(normalized);
 
     if (!file || file.type !== "file") {
@@ -143,7 +147,9 @@ export class VirtualFileSystem {
   }
 
   deleteFile(path: string): boolean {
-    const normalized = this.normalizePath(path);
+    this.validatePath(path);
+    
+    const normalized = normalizePath(path);
     const file = this.files.get(normalized);
 
     if (!file || normalized === "/") {
@@ -155,81 +161,63 @@ export class VirtualFileSystem {
       return false;
     }
 
-    // If it's a directory, remove all children recursively
-    if (file.type === "directory" && file.children) {
-      for (const [_, child] of file.children) {
-        this.deleteFile(child.path);
-      }
-    }
-
+    this.deleteRecursively(file);
     parent.children!.delete(file.name);
     this.files.delete(normalized);
 
     return true;
   }
 
-  rename(oldPath: string, newPath: string): boolean {
-    const normalizedOld = this.normalizePath(oldPath);
-    const normalizedNew = this.normalizePath(newPath);
+  private deleteRecursively(node: FileNode): void {
+    if (node.type === "directory" && node.children) {
+      for (const [_, child] of node.children) {
+        this.deleteRecursively(child);
+        this.files.delete(child.path);
+      }
+    }
+  }
 
-    // Can't rename root
+  rename(oldPath: string, newPath: string): boolean {
+    this.validatePath(oldPath);
+    this.validatePath(newPath);
+    
+    const normalizedOld = normalizePath(oldPath);
+    const normalizedNew = normalizePath(newPath);
+
     if (normalizedOld === "/" || normalizedNew === "/") {
       return false;
     }
 
-    // Check if source exists
     const sourceNode = this.files.get(normalizedOld);
-    if (!sourceNode) {
+    if (!sourceNode || this.files.has(normalizedNew)) {
       return false;
     }
 
-    // Check if destination already exists
-    if (this.files.has(normalizedNew)) {
-      return false;
-    }
-
-    // Get parent of source
     const oldParent = this.getParentNode(normalizedOld);
     if (!oldParent || oldParent.type !== "directory") {
       return false;
     }
 
-    // Create parent directories for destination if needed
-    const newParentPath = this.getParentPath(normalizedNew);
-    if (!this.exists(newParentPath)) {
-      const parts = newParentPath.split("/").filter(Boolean);
-      let currentPath = "";
+    this.ensureParentDirectories(normalizedNew);
 
-      for (const part of parts) {
-        currentPath += "/" + part;
-        if (!this.exists(currentPath)) {
-          this.createDirectory(currentPath);
-        }
-      }
-    }
-
-    // Get parent of destination
     const newParent = this.getParentNode(normalizedNew);
     if (!newParent || newParent.type !== "directory") {
       return false;
     }
 
-    // Remove from old parent
+    // Update node and parents
     oldParent.children!.delete(sourceNode.name);
-
-    // Update the node's path and name
-    const newName = this.getFileName(normalizedNew);
+    
+    const newName = getFileName(normalizedNew);
     sourceNode.name = newName;
     sourceNode.path = normalizedNew;
-
-    // Add to new parent
+    
     newParent.children!.set(newName, sourceNode);
 
-    // Update in files map
+    // Update file maps
     this.files.delete(normalizedOld);
     this.files.set(normalizedNew, sourceNode);
 
-    // If it's a directory, update all children paths recursively
     if (sourceNode.type === "directory" && sourceNode.children) {
       this.updateChildrenPaths(sourceNode);
     }
@@ -256,17 +244,23 @@ export class VirtualFileSystem {
   }
 
   exists(path: string): boolean {
-    const normalized = this.normalizePath(path);
+    if (!isValidPath(path)) return false;
+    
+    const normalized = normalizePath(path);
     return this.files.has(normalized);
   }
 
   getNode(path: string): FileNode | null {
-    const normalized = this.normalizePath(path);
+    if (!isValidPath(path)) return null;
+    
+    const normalized = normalizePath(path);
     return this.files.get(normalized) || null;
   }
 
   listDirectory(path: string): FileNode[] | null {
-    const normalized = this.normalizePath(path);
+    if (!isValidPath(path)) return null;
+    
+    const normalized = normalizePath(path);
     const dir = this.files.get(normalized);
 
     if (!dir || dir.type !== "directory") {

@@ -83,6 +83,51 @@ npm run db:reset  # Reset database with force
 
 ## Code Writing Guidelines
 - Use comments sparingly only on complex code.
+- Use simple english to provide explanation for comments
 
 ## Database Schema
 - The data base schema is defined in the @prisma/schema.prisma file. Reference it anytime you need to understand the structure of data stored in the database
+
+## Development Best Practices & Lessons Learned
+
+### Security vs Functionality Balance
+- **Lesson**: Content Security Policy (CSP) headers can break essential functionality
+- **Practice**: When adding security restrictions, test ALL features incrementally
+- **Example**: CSP headers in `next.config.ts` blocked Monaco Editor web workers and preview iframe execution
+- **Approach**: Implement security measures one at a time, testing after each change
+
+### Avoid Over-Engineering Working Code
+- **Lesson**: "Improvements" to working code often introduce new bugs
+- **Practice**: If it ain't broke, don't fix it - question whether changes are truly necessary
+- **Example**: Adding ErrorBoundary wrappers and extra console logging broke the preview functionality
+- **Approach**: Keep working reference code when making changes, compare frequently
+
+### State Management Complexity
+- **Lesson**: Duplicate state creates race conditions and synchronization issues
+- **Practice**: Prefer single source of truth, avoid redundant state management
+- **Example**: Adding extra `setFiles` state alongside file system caused preview update issues
+- **Approach**: Use existing patterns and avoid introducing parallel state systems
+
+### Configuration File Impact
+- **Lesson**: Changes to configuration files (next.config.ts, package.json) have wide-reaching effects
+- **Practice**: Test all functionality after configuration changes
+- **Example**: next.config.ts CSP changes affected both Monaco Editor and preview rendering
+- **Approach**: Document configuration dependencies and test comprehensively
+
+### Debugging Strategy
+- **Lesson**: Compare working vs broken versions systematically
+- **Practice**: Always maintain a working reference when refactoring
+- **Example**: Comparing UIGEN2 (working) vs UIGEN (broken) revealed exact differences
+- **Approach**: Make incremental changes and test each one rather than batch changes
+
+### Component Architecture Principles
+- **Lesson**: Simple, focused components are more reliable than complex wrapper components
+- **Practice**: Avoid unnecessary abstraction layers and error boundaries unless specifically needed
+- **Example**: PreviewFrame worked better as a direct component rather than wrapped in ErrorBoundary
+- **Approach**: Start simple and add complexity only when proven necessary
+
+### Testing After Changes
+- **Lesson**: Even small changes can have unexpected side effects
+- **Practice**: Test core functionality after every significant change
+- **Critical Features**: Always verify preview rendering, file system operations, and Monaco Editor after modifications
+- **Approach**: Have a standard set of manual tests for core features

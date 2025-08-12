@@ -7,14 +7,32 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { getLanguageModel } from "@/lib/provider";
 import { generationPrompt } from "@/lib/prompts/generation";
+import { NextRequest } from "next/server";
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+
+  let requestBody;
+  try {
+    requestBody = await req.json();
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        error: "Invalid JSON in request body",
+      }),
+      {
+        status: 400,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
+    );
+  }
+
   const {
     messages,
     files,
     projectId,
-  }: { messages: any[]; files: Record<string, FileNode>; projectId?: string } =
-    await req.json();
+  }: { messages: any[]; files: Record<string, FileNode>; projectId?: string } = requestBody;
 
   messages.unshift({
     role: "system",
