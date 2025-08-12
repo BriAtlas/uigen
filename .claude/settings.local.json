@@ -45,7 +45,9 @@
       "Bash(find:*)",
       "Bash(claude install-github-app)",
       "Bash(git remote set-url:*)",
-      "Bash(git pull:*)"
+      "Bash(git pull:*)",
+      "Bash(git reset:*)",
+      "Bash(git fetch:*)"
     ],
     "deny": []
   }
