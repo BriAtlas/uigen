@@ -34,7 +34,7 @@
       "Bash(pkill:*)",
       "Bash(taskkill:*)",
       "WebFetch(domain:github.com)",
-      "mcp__playwright",
+      "mcp__playwright*",
       "Bash(dir:*)",
       "Bash(npx playwright:*)",
       "Bash(echo $HOME)",
@@ -47,7 +47,9 @@
       "Bash(git remote set-url:*)",
       "Bash(git pull:*)",
       "Bash(git reset:*)",
-      "Bash(git fetch:*)"
+      "Bash(git fetch:*)",
+      "Bash(rm:*)",
+      "Bash(claude doctor)"
     ],
     "deny": []
   }
