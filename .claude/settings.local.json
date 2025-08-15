@@ -49,7 +49,12 @@
       "Bash(git reset:*)",
       "Bash(git fetch:*)",
       "Bash(rm:*)",
-      "Bash(claude doctor)"
+      "Bash(claude doctor)",
+      "Bash(cat:*)",
+      "Bash(git log:*)",
+      "Bash(rg:*)",
+      "Bash(grep:*)",
+      "Bash(npm outdated:*)"
     ],
     "deny": []
   }
